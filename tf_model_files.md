@@ -8,23 +8,22 @@
 
 ## GraphDef 类
 
-TensorFlow 计算的基础是 Graph 对象，称为计算图。计算图拥有一个节点网络，每个节点表示一种操作，彼此连接作为输入和输出。创建了 Graph 对象之后，你可以通过调用 as_graph_def()将它保存起来，该调用返回的是一个 GraphDef 对象。
+The basis of TensorFlow calculations is the Graph object, called a calculation graph. The calculation graph has a network of nodes, each node represents an operation, connected to each other as input and output. After creating a Graph object, you can save it by calling as_graph_def(), which returns a GraphDef object.
 
-GraphDef 类是由 ProtoBuf 库根据 [tensorflow/core/framework/graph.proto][graph_proto] 定义创建的对象。protobuf 工具分析此文本文件，并生成用于加载、存储和操作计算图定义的代码。如果你看到表示模型的单个 TensorFlow 文件，则它很有可能包含了某个 GraphDef 对象的序列化版本，而且它是用 protobuf 代码保存的。
+The GraphDef class is an object created by the ProtoBuf library according to the definition of tensorflow/core/framework/graph.proto. The protobuf tool analyzes this text file and generates code for loading, storing, and manipulating calculation graph definitions. If you see a single TensorFlow file that represents a model, it most likely contains a serialized version of a GraphDef object, and it was saved with protobuf code.
 
-这种生成的代码被用于在磁盘上保存和加载 GraphDef 文件，实际加载模型的代码如下所示：
+This generated code is used to save and load GraphDef files on disk. The actual code to load the model is as follows:：
 
 ```python
 graph_def = graph_pb2.GraphDef()
 ```
 
-此行创建一个空的 GraphDef 对象，即从 graph.proto 中的文本定义创建的类。接下来我们就用这个对象来从文件中读取数据。
-
+This line creates an empty GraphDef object, which is a class created from the text definition in graph.proto. Next we will use this object to read data from the file.
 ```python
 with open(FLAGS.graph, "rb") as f:
 ```
 
-这里，根据脚本参数得到了一个文件句柄
+Here, a file handle is obtained according to the script parameters
 
 ```python
   if FLAGS.input_binary:
@@ -33,72 +32,72 @@ with open(FLAGS.graph, "rb") as f:
     text_format.Merge(f.read(), graph_def)
 ```
 
-## 文本还是二进制？
+## Text or binary?
 
-ProtoBuf 实际上支持两种不同的文件保存格式。TextFormat 是一种人眼可读的文本形式，这在调试和编辑时是很方便的，但它在存储数值数据时会变得很大，比如我们常见的权重数据。这种格式的一个小的示例参见 [graph_run_run2.pbtxt][graph_run]。
+ProtoBuf actually supports two different file saving formats. TextFormat is a human-readable text form, which is very convenient for debugging and editing, but it becomes very large when storing numerical data, such as our common weight data. For a small example of this format, see [graph_run_run2.pbtxt][graph_run].
 
-相比于文本格式，二进制格式的文件会小得多，缺点就是它不易读。在脚本中，我们会要求用户提供一个标志，指示输入文件是二进制还是文本，然后再根据这个标志来调用相应的函数。你可以在 [inception_v3 archive][inception_v3] 中找到一个较大的二进制文件的示例 `inception_v3_2016_08_28_frozen.pb` 。
+Compared to the text format, the binary format file will be much smaller, the disadvantage is that it is not easy to read. In the script, we will ask the user to provide a flag indicating whether the input file is binary or text, and then call the corresponding function based on this flag. You can find an example of a larger binary file `inception_v3_2016_08_28_frozen.pb` in [inception_v3 archive][inception_v3].
 
-API 本身可能有点混乱 - 二进制格式的调用实际上是 ParseFromString()，而文本格式的加载则用到 text_format 模块中的一个工具函数。
+The API itself may be a bit confusing-the call to the binary format is actually ParseFromString(), and the loading of the text format uses a utility function in the text_format module.
 
-## 节点
 
-一旦将文件加载到 graph_def 变量中，你现在就可以访问其中的数据了。对于大多数实际应用场合，重要部分是存储在节点成员中的节点列表。下面的代码演示了如何遍历这些节点：
+## Node
+
+Once the file is loaded into the graph_def variable, you can now access the data in it. For most practical applications, the important part is the node list stored in the node member. The following code demonstrates how to traverse these nodes:
 
 ```python
 for node in graph_def.node
 ```
 
-每个节点都是一个 NodeDef 对象，定义在 [tensorflow/core/framework/node_def.proto][nodedef]。它们是构造 TensorFlow 计算图的基石，每一个节点都定义了一个简单操作以及输入连接。下面是 NodeDef 的成员及其描述。
+Each node is a NodeDef object, defined in [tensorflow/core/framework/node_def.proto][nodedef]. They are the cornerstone of constructing TensorFlow calculation graphs. Each node defines a simple operation and input connection. Below are the members of NodeDef and their descriptions.
 
 ### `name`
 
-每个节点都应该有一个唯一的标识符，而且不能和计算图中的其它节点冲突。如果在用 Python API 构造一个计算图时没有指定名称，TensorFlow 会采用能反映操作类型的默认名称，比如 “MatMul”，然后在后面添加单调递增的数字，比如 “5”，将其作为此节点的名称。这个名称在一些场合会用到，比如连接节点时，或在计算图运行时设置输入输出。
+Each node should have a unique identifier, and it cannot conflict with other nodes in the calculation graph. If you do not specify a name when constructing a calculation graph with the Python API, TensorFlow will use the default name that reflects the type of operation, such as "MatMul", and then add a monotonically increasing number, such as "5", as the node name. This name will be used in some occasions, such as connecting nodes, or setting input and output when the calculation graph is running.
 
 ### `op`
 
-op 定义了要运行的操作，比如，"Add"，"MatMul"，或 "Conv2D"。当一个计算图运行时，
-这个操作名被用于在 TensorFlow 注册表中寻找其具体实现。这个注册表通过调用宏 REGISTER_OP 来获得，类似于
-[tensorflow/core/ops/nn_ops.cc][nnops]。
+op defines the operation to be run, for example, "Add", "MatMul", or "Conv2D". When a calculation graph is run,
+This operation name is used to find its specific implementation in the TensorFlow registry. This registry is obtained by calling the macro REGISTER_OP, similar to
+[tensorflow/core/ops/nn_ops.cc][nnops].
 
 ### `input`
 
-input 是一个字符串列表，其中每个字符串为另一个节点的名称，后面可选择性地加上冒号和那个节点的输出端口号。比如，一个节点若有两个输入，则这个列表类似于 ["some_node_name", "another_node_name"]，它又等价于 ["some_node_name:0", "another_node_name:0"]，意思是此节点的第一个输入是名为“some_node_name”的节点的第一个输出，而第二个输入是名为“another_node_name”的节点的第一个输出。
+input is a list of strings, where each string is the name of another node, optionally followed by a colon and the output port number of that node. For example, if a node has two inputs, this list is similar to ["some_node_name", "another_node_name"], which is equivalent to ["some_node_name:0", "another_node_name:0"], which means the first One input is the first output of the node named "some_node_name", and the second input is the first output of the node named "another_node_name".
 
 ### `device`
 
-device 表示该节点使用的设备。在大多数情况下，你可以忽略这一点，因为它主要针对分布式环境，
-或者当你强行让它运行在 CPU 或 GPU 上时会用到。
+device represents the device used by the node. In most cases, you can ignore this because it is mainly for distributed environments.
+Or it will be used when you force it to run on the CPU or GPU.
 
 ### `attr`
 
-attr 是一个字典数据结构，用键/值存储了一个节点的所有属性。它们是节点的永久属性，即在运行时不会变化，比如卷积过滤器的尺寸，或者常值操作的值。因为属性值的类型非常之多，从字符串、到整型、到张量值的数组，等等，所以需要有一个专门的 protobuf 文件来定义存储这些属性的数据结构，详情参考 [tensorflow/core/framework/attr_value.proto][attr_proto]。
+attr is a dictionary data structure that stores all the attributes of a node by key/value. They are the permanent properties of the node, that is, they will not change at runtime, such as the size of the convolution filter, or the value of the constant operation. Because there are so many types of attribute values, from strings, to integers, to arrays of tensor values, etc., a special protobuf file is needed to define the data structure for storing these attributes. For details, please refer to [tensorflow/core /framework/attr_value.proto][attr_proto].
 
-每个属性都有一个唯一的名称字符串，并且在定义操作时会列出预期的属性。如果节点中不存在某个属性，
-但它在操作定义中又列出了默认值，则在创建计算图时将使用默认值。
+Each attribute has a unique name string, and the expected attributes are listed when the operation is defined. If an attribute does not exist in the node,
+But it lists the default value in the operation definition, and the default value will be used when creating the calculation graph.
 
-在 Python 中，你可以通过调用 node.name，node.op 等方法访问所有这些成员。GraphDef 中存储的节点列表构成了计算图模型框架的完整定义。
+In Python, you can access all these members by calling node.name, node.op and other methods. The node list stored in GraphDef constitutes a complete definition of the computational graph model framework.
 
-## 冻结（Freezing）
+## Freezing
 
-令人困惑的是，训练时的权值通常不会存储在上述文件格式中。相反，它们被保存在单独的检查点（checkpoint）文件中，而计算图中包含一些 Variable 操作（op），用于初始化时加载最新的检查点文件中的值。但是在部署到生产环境中时，使用分离的文件并不是很方便，所以就有了脚本 freeze_graph.py。它的作用是将一个计算图定义和一些检查点文件冻结为单个文件。
+Confusingly, the weights during training are usually not stored in the above file format. Instead, they are saved in a separate checkpoint file, and the calculation graph contains some Variable operations (op), which are used to load the values ​​in the latest checkpoint file during initialization. But when deploying to a production environment, it is not very convenient to use a separate file, so there is a script freeze_graph.py. Its function is to freeze a calculation graph definition and some checkpoint files into a single file.
 
-在这个过程中，脚本会先加载 GraphDef，然后从最新的检查点文件中提取那些变量的值，
-然后将每个 Variable 操作替换为一个 Const 操作，这时权值被存储在了它的属性中。
-之后，所有与前向推理无关的多余节点都会被剔除，最终的 GraphDef 被输出到了一个文件中。
+In this process, the script will load GraphDef first, and then extract the values ​​of those variables from the latest checkpoint file.
+Then replace each Variable operation with a Const operation, at this time the weight is stored in its attribute.
+After that, all redundant nodes not related to forward reasoning will be eliminated, and the final GraphDef will be output to a file.
 
-## 权值格式(Weight Formats)
+## Weight Formats
 
-如果你要用 TensorFlow 模型来表示神经网络，最常见的一个问题是如何对权值进行提取和理解。常用的存储方式是用 freeze_graph 脚本，将权值作为 Tensors 存储在 Const 操作中。这些权值定义在 [tensorflow/core/framework/tensor.proto][tensor_proto]
-中，其中包含了数据大小和类型，以及这些值本身。在 Python 中，通过调用诸如 `some_node_def.attr['value'].tensor` 之类的操作，可以从表示 Const 操作的 NodeDef 中获得一个 TensorProto 对象。
+If you want to use a TensorFlow model to represent a neural network, one of the most common problems is how to extract and understand the weights. The common storage method is to use the freeze_graph script to store the weights as Tensors in the Const operation. These weights are defined in [tensorflow/core/framework/tensor.proto][tensor_proto]
+, Which contains the data size and type, as well as the values ​​themselves. In Python, by calling operations such as `some_node_def.attr['value'].tensor`, a TensorProto object can be obtained from the NodeDef representing the Const operation.
 
-这样会得到表示权值数据的一个对象。数据本身被存储到了名称以 `_val` 为后缀的其中一个列表中，列表名称反映了此对象的类型，比如 float_val 表示 32位 浮点数据类型。
+This will result in an object representing weight data. The data itself is stored in one of the lists whose name is suffixed with `_val`. The name of the list reflects the type of this object. For example, float_val represents a 32-bit floating point data type.
 
-在不同框架之间转换时，卷积层权值的存储顺序往往有些让人捉摸不透。在 TensorFlow 中，二维卷积 Conv2D 操作的过滤器权值被存储在第二个输入上，其存储顺序为
-`[filter_height, filter_width, input_depth, output_depth]`，其中 `filter_count` 增加 1 表示在内存中移向下一个相邻值。
+When converting between different frameworks, the storage order of the convolutional layer weights is often a bit unpredictable. In TensorFlow, the filter weights of the two-dimensional convolution Conv2D operation are stored on the second input in the order of
+`[filter_height, filter_width, input_depth, output_depth]`, where `filter_count` increased by 1 means moving to the next adjacent value in memory.
 
-希望通过这样一个概述，你能更好地了解关于 TensorFlow 模型文件的内部细节，如果有一天你需要操作这些模型文件了，但愿本文能够有所帮助。
-
+I hope that through such an overview, you can better understand the internal details of TensorFlow model files. If you need to manipulate these model files one day, I hope this article can be helpful.
 [原文][source]
 
 [protobuf]: https://developers.google.com/protocol-buffers
