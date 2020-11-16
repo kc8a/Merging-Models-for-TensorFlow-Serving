@@ -1,0 +1,43 @@
+Load model
+
+export_path = './path/to/saved_model.pb'
+
+# We start a session using a temporary fresh Graph
+with tf.Session(graph=tf.Graph()) as sess:
+    '''
+    You can provide 'tags' when saving a model,
+    in my case I provided, 'serve' tag 
+    '''
+
+    tf.saved_model.loader.load(sess, ['serve'], export_path)
+    graph = tf.get_default_graph()
+
+    # print your graph's ops, if needed
+    print(graph.get_operations())
+
+    '''
+    In my case, I named my input and output tensors as
+    input:0 and output:0 respectively
+    ''' 
+    y_pred = sess.run('output:0', feed_dict={'input:0': X_test})
+
+To give some more context here, this is how I saved my model which can be loaded as above.
+Save model
+
+
+x = tf.get_default_graph().get_tensor_by_name('input:0')
+y = tf.get_default_graph().get_tensor_by_name('output:0')
+
+export_path = './models/'
+builder = tf.saved_model.builder.SavedModelBuilder(export_path)
+signature = tf.saved_model.predict_signature_def(
+                inputs={'input': x}, outputs={'output': y}
+                )
+
+# using custom tag instead of: tags=[tf.saved_model.tag_constants.SERVING]
+builder.add_meta_graph_and_variables(sess=obj.sess,
+                                     tags=['serve'],
+                                     signature_def_map={'predict': signature})
+builder.save()
+
+This will save your protobuf ('saved_model.pb') in the said folder ('models' here) which can then be loaded as stated above.
